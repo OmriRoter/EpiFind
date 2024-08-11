@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "841901537910",
+    "firebase_url": "https://epifind-3324e-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "epifind-3324e",
+    "storage_bucket": "epifind-3324e.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:841901537910:android:21c2eb79eede4a68f7bd57",
+        "android_client_info": {
+          "package_name": "com.example.epifind"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "841901537910-0fqim8s856t8c9ce3vlgvkj30ck52mlm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.epifind",
+            "certificate_hash": "57873b37d1a9e9d1b36cbcddb9ed365d49de132e"
+          }
+        },
+        {
+          "client_id": "841901537910-28rk0i4p64tjp4hefvfqnfd7j7g3i30i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUIzw9NxTy353APPyK3DnSSx1Rk2CYR2g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "841901537910-28rk0i4p64tjp4hefvfqnfd7j7g3i30i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
