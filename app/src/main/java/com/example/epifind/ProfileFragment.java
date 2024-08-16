@@ -6,29 +6,26 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import com.bumptech.glide.Glide;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 import com.example.epifind.databinding.FragmentProfileBinding;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 
 public class ProfileFragment extends Fragment {
     private FragmentProfileBinding binding;
-    private DatabaseReference mDatabase;
+    private UserManager userManager;
     private FirebaseUser currentUser;
     private boolean[] selectedAllergies;
     private List<String> allergyList;
     private String selectedEpiPenExpiry = "";
+    private boolean isEditMode = false;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -36,7 +33,7 @@ public class ProfileFragment extends Fragment {
         binding = FragmentProfileBinding.inflate(inflater, container, false);
         View view = binding.getRoot();
 
-        mDatabase = FirebaseDatabase.getInstance().getReference();
+        userManager = UserManager.getInstance();
         currentUser = FirebaseAuth.getInstance().getCurrentUser();
 
         setupAllergyList();
@@ -46,19 +43,17 @@ public class ProfileFragment extends Fragment {
             loadUserProfile();
         }
 
+        // Check if we need to start in edit mode (for new users or incomplete profiles)
+        Bundle args = getArguments();
+        if (args != null && args.getBoolean("startInEditMode", false)) {
+            enableEditMode();
+        }
+
         return view;
     }
 
     private void setupAllergyList() {
-        allergyList = new ArrayList<>();
-        allergyList.add("Peanuts");
-        allergyList.add("Tree Nuts");
-        allergyList.add("Milk");
-        allergyList.add("Egg");
-        allergyList.add("Wheat");
-        allergyList.add("Soy");
-        allergyList.add("Fish");
-        allergyList.add("Shellfish");
+        allergyList = new ArrayList<>(Arrays.asList("Peanuts", "Tree nuts", "Milk", "Eggs", "Wheat", "Soy", "Fish", "Shellfish"));
         selectedAllergies = new boolean[allergyList.size()];
     }
 
@@ -70,42 +65,54 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadUserProfile() {
-        // Load user details from Firebase Auth
-        Glide.with(this)
-                .load(currentUser.getPhotoUrl())
-                .centerCrop()
-                .placeholder(R.drawable.epifinlogo)
-                .into(binding.mainIMGImage);
-        binding.mainLBLName.setText(currentUser.getDisplayName());
-        binding.mainLBLEmail.setText(currentUser.getEmail());
-        binding.mainLBLPhone.setText(currentUser.getPhoneNumber());
-        binding.mainLBLUid.setText(currentUser.getUid());
+        if (currentUser.getPhotoUrl() != null) {
+            Glide.with(this)
+                    .load(currentUser.getPhotoUrl())
+                    .centerCrop()
+                    .placeholder(R.drawable.epifinlogo)
+                    .into(binding.mainIMGImage);
+        }
 
-        // Load additional user data from Realtime Database
-        mDatabase.child("users").child(currentUser.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
+        // Load user data
+        userManager.getUserProfile(new UserManager.OnUserProfileFetchListener() {
             @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                if (dataSnapshot.exists()) {
-                    UserProfile userProfile = dataSnapshot.getValue(UserProfile.class);
-                    if (userProfile != null) {
-                        binding.textViewSelectedAllergies.setText(userProfile.getAllergies());
-                        binding.textViewEpiPenExpiry.setText(userProfile.getEpiPenExpiry());
-                        selectedEpiPenExpiry = userProfile.getEpiPenExpiry();
-                        updateSelectedAllergies(userProfile.getAllergies());
-                    }
+            public void onSuccess(UserProfile userProfile) {
+                binding.mainLBLName.setText(userProfile.getName() != null ? userProfile.getName() : "");
+                binding.mainLBLEmail.setText(currentUser.getEmail() != null ? currentUser.getEmail() : "");
+                binding.mainLBLPhone.setText(currentUser.getPhoneNumber() != null ? currentUser.getPhoneNumber() : "");
+                binding.textViewSelectedAllergies.setText(userProfile.getAllergies() != null ? userProfile.getAllergies() : "");
+                binding.textViewEpiPenExpiry.setText(userProfile.getEpiPenExpiry() != null ? userProfile.getEpiPenExpiry() : "");
+                selectedEpiPenExpiry = userProfile.getEpiPenExpiry() != null ? userProfile.getEpiPenExpiry() : "";
+                if (userProfile.getAllergies() != null) {
+                    updateSelectedAllergies(userProfile.getAllergies());
+                }
+
+                // If the profile is incomplete, start in edit mode
+                if (userProfile.getName() == null || userProfile.getName().isEmpty() ||
+                        userProfile.getAllergies() == null || userProfile.getAllergies().isEmpty() ||
+                        userProfile.getEpiPenExpiry() == null || userProfile.getEpiPenExpiry().isEmpty()) {
+                    enableEditMode();
                 }
             }
 
             @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-                Toast.makeText(getContext(), "Failed to load profile: " + databaseError.getMessage(), Toast.LENGTH_SHORT).show();
+            public void onFailure(String error) {
+                Toast.makeText(getContext(), "Failed to load profile: " + error, Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void updateSelectedAllergies(String allergies) {
+        if (allergies == null || allergies.isEmpty()) {
+            for (int i = 0; i < selectedAllergies.length; i++) {
+                selectedAllergies[i] = false;
+            }
+            return;
+        }
+
         String[] selectedAllergiesArray = allergies.split(", ");
         for (int i = 0; i < allergyList.size(); i++) {
+            selectedAllergies[i] = false;
             for (String selectedAllergy : selectedAllergiesArray) {
                 if (allergyList.get(i).equals(selectedAllergy)) {
                     selectedAllergies[i] = true;
@@ -152,6 +159,10 @@ public class ProfileFragment extends Fragment {
     }
 
     private void enableEditMode() {
+        isEditMode = true;
+        binding.editTextName.setVisibility(View.VISIBLE);
+        binding.mainLBLName.setVisibility(View.GONE);
+        binding.editTextName.setText(binding.mainLBLName.getText());
         binding.buttonSelectAllergies.setEnabled(true);
         binding.buttonSelectEpiPenExpiry.setEnabled(true);
         binding.buttonSaveProfile.setVisibility(View.VISIBLE);
@@ -159,6 +170,10 @@ public class ProfileFragment extends Fragment {
     }
 
     private void disableEditMode() {
+        isEditMode = false;
+        binding.editTextName.setVisibility(View.GONE);
+        binding.mainLBLName.setVisibility(View.VISIBLE);
+        binding.mainLBLName.setText(binding.editTextName.getText());
         binding.buttonSelectAllergies.setEnabled(false);
         binding.buttonSelectEpiPenExpiry.setEnabled(false);
         binding.buttonSaveProfile.setVisibility(View.GONE);
@@ -166,20 +181,51 @@ public class ProfileFragment extends Fragment {
     }
 
     private void saveUserProfile() {
+        String name = binding.editTextName.getText().toString().trim();
         String allergies = binding.textViewSelectedAllergies.getText().toString();
         String epiPenExpiry = binding.textViewEpiPenExpiry.getText().toString();
+        boolean hasEpiPen = !epiPenExpiry.isEmpty();
 
-        UserProfile userProfile = new UserProfile(currentUser.getDisplayName(), allergies, epiPenExpiry);
+        if (name.isEmpty()) {
+            Toast.makeText(getContext(), "Please enter your name", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-        mDatabase.child("users").child(currentUser.getUid()).setValue(userProfile)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
+        userManager.getUserProfile(new UserManager.OnUserProfileFetchListener() {
+            @Override
+            public void onSuccess(UserProfile existingProfile) {
+                UserProfile updatedProfile = new UserProfile(
+                        name,
+                        allergies,
+                        epiPenExpiry,
+                        existingProfile.getLatitude(),
+                        existingProfile.getLongitude(),
+                        hasEpiPen
+                );
+
+                userManager.createOrUpdateUser(updatedProfile, new UserManager.OnUserProfileUpdateListener() {
+                    @Override
+                    public void onSuccess() {
                         Toast.makeText(getContext(), "Profile saved successfully", Toast.LENGTH_SHORT).show();
                         disableEditMode();
-                    } else {
-                        Toast.makeText(getContext(), "Failed to save profile: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                        // Navigate to HomeFragment
+                        if (getActivity() instanceof MainActivity) {
+                            ((MainActivity) getActivity()).navigateToHome();
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(String error) {
+                        Toast.makeText(getContext(), "Failed to save profile: " + error, Toast.LENGTH_SHORT).show();
                     }
                 });
+            }
+
+            @Override
+            public void onFailure(String error) {
+                Toast.makeText(getContext(), "Failed to fetch existing profile: " + error, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     @Override

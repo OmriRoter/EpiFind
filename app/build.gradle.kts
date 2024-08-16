@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     implementation(libs.play.services.location)
+    implementation(libs.firebase.messaging)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
@@ -64,5 +65,9 @@ dependencies {
     //Google-maps
     implementation(libs.play.services.maps)
 
+    //Firebase-messaging
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.inappmessaging.display)
+    implementation(libs.google.firebase.analytics)
 
 }
