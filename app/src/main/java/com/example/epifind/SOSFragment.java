@@ -141,11 +141,12 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
                 displayNearbyUsersOnMap();
                 updateUsersCount();
                 userAdapter.notifyDataSetChanged();
+                updateNearbyUsersSOSStatus();
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError databaseError) {
-                Toast.makeText(requireContext(), "Failed to find nearby users", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Failed to find nearby users", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -174,6 +175,15 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
 
     private void updateUsersCount() {
         usersCountTextView.setText("Nearby users found: " + nearbyUsersWithEpiPen.size());
+    }
+
+    private void updateNearbyUsersSOSStatus() {
+        for (UserProfile user : nearbyUsersWithEpiPen) {
+            if (user.getFcmToken() != null && !user.getFcmToken().isEmpty()) {
+                mDatabase.child("sos_requests").child(user.getFcmToken()).setValue(true)
+                        .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to update SOS status for " + user.getName(), Toast.LENGTH_SHORT).show());
+            }
+        }
     }
 
     // MapView lifecycle methods

@@ -9,6 +9,9 @@ public class UserProfile {
     private boolean hasEpiPen;
     private boolean needsHelp;
     private String fcmToken = "";
+    private String uid = "";
+    private boolean sosRequested = false;
+
 
 
     public UserProfile() {}
@@ -50,4 +53,11 @@ public class UserProfile {
     public void setFcmToken(String fcmToken) {
         this.fcmToken = fcmToken != null ? fcmToken : "";
     }
+
+    public String getUid() { return uid; }
+    public void setUid(String uid) { this.uid = uid; }
+
+    public boolean isSosRequested() { return sosRequested; }
+    public void setSosRequested(boolean sosRequested) { this.sosRequested = sosRequested; }
+
 }

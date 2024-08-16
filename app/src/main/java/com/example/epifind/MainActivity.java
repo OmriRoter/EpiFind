@@ -25,14 +25,24 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.messaging.FirebaseMessaging;
+
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 1001;
     private UserManager userManager;
+    private LocalNotificationManager notificationManager;
+    private DatabaseReference sosRequestsRef;
+    private String fcmToken;
+
+
 
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -52,6 +62,18 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         userManager = UserManager.getInstance();
+        notificationManager = new LocalNotificationManager(this);
+        sosRequestsRef = FirebaseDatabase.getInstance().getReference("sos_requests");
+
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        return;
+                    }
+                    fcmToken = task.getResult();
+                    checkSOSStatus();
+                });
+
 
         checkUserProfileComplete();
 
@@ -282,4 +304,26 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack(null)
                 .commit();
     }
+    private void checkSOSStatus() {
+        if (fcmToken == null || fcmToken.isEmpty()) {
+            return;
+        }
+
+        sosRequestsRef.child(fcmToken).addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                Boolean sosRequested = dataSnapshot.getValue(Boolean.class);
+                if (sosRequested != null && sosRequested) {
+                    notificationManager.showNotification("SOS Alert", "Someone nearby needs help with an allergic reaction!");
+                    sosRequestsRef.child(fcmToken).setValue(false);
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                // Handle possible errors.
+            }
+        });
+    }
+
 }
