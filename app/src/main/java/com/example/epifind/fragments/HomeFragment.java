@@ -1,17 +1,28 @@
-package com.example.epifind;
+package com.example.epifind.fragments;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
+
+import com.example.epifind.R;
+import com.example.epifind.managers.SOSManager;
+import com.example.epifind.managers.UserManager;
+import com.example.epifind.activities.MainActivity;
+import com.example.epifind.utils.EpiPenExpiryChecker;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -19,50 +30,88 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
 import com.example.epifind.databinding.FragmentHomeBinding;
-
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private FragmentHomeBinding binding;
     private GoogleMap mMap;
-    private FusedLocationProviderClient fusedLocationClient;
-    private DatabaseReference mDatabase;
-    private FirebaseUser currentUser;
     private SOSManager sosManager;
-    private boolean isSOSButtonPressed = false;
-
+    private UserManager userManager;
+    private FrameLayout alertContainer;
+    private TextView alertMessage;
+    private Button dismissButton;
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
-    private static final String TAG = "HomeFragment";
+    private FusedLocationProviderClient fusedLocationClient;
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         binding = FragmentHomeBinding.inflate(inflater, container, false);
         View view = binding.getRoot();
 
-
+        userManager = UserManager.getInstance();
+        sosManager = new SOSManager(requireContext());
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
-        mDatabase = FirebaseDatabase.getInstance().getReference();
-        FirebaseAuth mAuth = FirebaseAuth.getInstance();
-        currentUser = mAuth.getCurrentUser();
 
+        // Initialize map
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map);
-        assert mapFragment != null;
-        mapFragment.getMapAsync(this);
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(this);
+        }
 
+        // Initialize alert views
+        alertContainer = view.findViewById(R.id.alertContainer);
+        alertMessage = view.findViewById(R.id.alertMessage);
+        dismissButton = view.findViewById(R.id.dismissButton);
+
+        // Set up SOS button
         setupSosButton();
 
-        sosManager = new SOSManager(requireContext());
-        setupSosButton();
+        // Set up dismiss button for alert
+        dismissButton.setOnClickListener(v -> alertContainer.setVisibility(View.GONE));
+
+        // Check EpiPen expiry
+        checkEpiPenExpiry();
 
         return view;
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        checkEpiPenExpiry();
+    }
+
+    private void checkEpiPenExpiry() {
+        EpiPenExpiryChecker.checkEpiPenExpiry(userManager, daysUntilExpiry -> {
+            if (daysUntilExpiry <= 7 && daysUntilExpiry > 0) {
+                Context context = getContext();
+                if (context != null) {
+                    showExpiryAlert(daysUntilExpiry);
+                }
+            } else if (daysUntilExpiry == 0) {
+                Context context = getContext();
+                if (context != null) {
+                    showExpiryAlert(daysUntilExpiry);
+                    Toast.makeText(context, "Your EpiPen expires today! Please replace it.", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+
+
+    private void showExpiryAlert(int days) {
+        if (days == 0) {
+            alertMessage.setText("Your EpiPen has expired! Please replace it immediately.");
+        } else {
+            alertMessage.setText("Your EpiPen will expire in " + days + " days!");
+        }
+        alertContainer.setVisibility(View.VISIBLE);
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private void setupSosButton() {
         binding.sosButton.setOnTouchListener((v, event) -> {
@@ -105,11 +154,16 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 case MotionEvent.ACTION_CANCEL:
                     sosManager.cancelSOSActivation(new SOSManager.SOSActivationListener() {
                         @Override
-                        public void onSOSActivationStarted() {}
+                        public void onSOSActivationStarted() {
+                        }
+
                         @Override
-                        public void onSOSActivationCancelled() {}
+                        public void onSOSActivationCancelled() {
+                        }
+
                         @Override
-                        public void onSOSActivated() {}
+                        public void onSOSActivated() {
+                        }
                     });
                     return true;
             }
@@ -165,5 +219,4 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         mMap = googleMap;
         enableMyLocation();
     }
-
 }

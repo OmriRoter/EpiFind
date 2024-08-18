@@ -1,5 +1,8 @@
-package com.example.epifind;
+package com.example.epifind.services;
 
+import static android.content.ContentValues.TAG;
+
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -11,12 +14,17 @@ import android.location.Location;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
+import com.example.epifind.R;
+import com.example.epifind.activities.MainActivity;
+import com.example.epifind.managers.LocalNotificationManager;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -24,20 +32,26 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 public class LocationUpdateService extends Service {
 
     private static final String CHANNEL_ID = "LocationServiceChannel";
     private static final int NOTIFICATION_ID = 12345;
+    private static final float MIN_DISTANCE_FOR_UPDATE = 10; // 10 meters
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private DatabaseReference mDatabase;
     private FirebaseUser currentUser;
     private Location lastLocation;
-    private static final float MIN_DISTANCE_FOR_UPDATE = 10; // 10 meters
+    private DatabaseReference latestSosRef;
+    private ValueEventListener sosListener;
+    private LocalNotificationManager notificationManager;
 
     @Override
     public void onCreate() {
@@ -57,18 +71,49 @@ public class LocationUpdateService extends Service {
                 }
             }
         };
+        notificationManager = new LocalNotificationManager(this);
+        latestSosRef = FirebaseDatabase.getInstance().getReference("latest_sos");
+
+        sosListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                if (dataSnapshot.exists()) {
+                    String requesterId = dataSnapshot.child("requester").getValue(String.class);
+                    if (requesterId != null && !requesterId.equals(currentUser.getUid())) {
+                        // A new SOS has been triggered by someone else
+                        notificationManager.showNotification(
+                                "SOS Alert",
+                                "Someone nearby needs help with an EpiPen!"
+                        );
+                    }
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+                Log.e(TAG, "Failed to read latest SOS data", databaseError.toException());
+            }
+        };
     }
+
+
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (checkPermissions()) {
-            createNotificationChannel();
-            startForeground(NOTIFICATION_ID, buildNotification());
-            requestLocationUpdates();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (checkPermissions()) {
+                createNotificationChannel();
+                startForeground(NOTIFICATION_ID, buildNotification());
+                requestLocationUpdates();
+            }
         }
+        // Start listening for SOS updates
+        latestSosRef.addValueEventListener(sosListener);
+
         return START_STICKY;
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.P)
     private boolean checkPermissions() {
         return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -103,20 +148,22 @@ public class LocationUpdateService extends Service {
         locationRequest.setFastestInterval(5000); // 5 seconds
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
-        if (checkPermissions()) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
-                return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (checkPermissions()) {
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    return;
+                }
+                fusedLocationClient.requestLocationUpdates(locationRequest,
+                        locationCallback,
+                        Looper.getMainLooper());
             }
-            fusedLocationClient.requestLocationUpdates(locationRequest,
-                    locationCallback,
-                    Looper.getMainLooper());
         }
     }
 
@@ -139,6 +186,10 @@ public class LocationUpdateService extends Service {
     public void onDestroy() {
         super.onDestroy();
         fusedLocationClient.removeLocationUpdates(locationCallback);
+        // Remove the SOS listener
+        if (sosListener != null) {
+            latestSosRef.removeEventListener(sosListener);
+        }
     }
 
     @Nullable

@@ -1,21 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/background_color">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="24dp">
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/main_IMG_image"
-            android:layout_width="250dp"
-            android:layout_height="250dp"
+        <androidx.cardview.widget.CardView
+            android:layout_width="200dp"
+            android:layout_height="200dp"
             android:layout_gravity="center_horizontal"
-            tools:srcCompat="@tools:sample/avatars" />
+            app:cardCornerRadius="100dp"
+            app:cardElevation="4dp"
+            android:layout_marginBottom="24dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/main_IMG_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                tools:srcCompat="@tools:sample/avatars" />
+
+        </androidx.cardview.widget.CardView>
 
         <TextView
             android:id="@+id/main_LBL_name"
@@ -23,72 +35,121 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:text="Name"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_color_primary" />
 
         <EditText
             android:id="@+id/editTextName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Enter your name"
-            android:visibility="gone" />
+            android:visibility="gone"
+            android:textColor="@color/text_color_primary"
+            android:textColorHint="@color/text_color_secondary" />
 
         <TextView
             android:id="@+id/main_LBL_email"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:text="E-Mail" />
+            android:text="E-Mail"
+            android:textSize="16sp"
+            android:textColor="@color/text_color_secondary"
+            android:layout_marginTop="8dp" />
 
         <TextView
             android:id="@+id/main_LBL_phone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:text="Phone" />
+            android:text="Phone"
+            android:textSize="16sp"
+            android:textColor="@color/text_color_secondary"
+            android:layout_marginTop="8dp" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonSelectAllergies"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select Allergies"
-            android:layout_marginTop="16dp"
-            android:enabled="false" />
+            android:text="Allergies"
+            android:layout_marginTop="24dp"
+            android:enabled="false"
+            app:cornerRadius="8dp"
+            android:textColor="@color/white"
+            android:backgroundTint="@color/button_color" />
 
         <TextView
             android:id="@+id/textViewSelectedAllergies"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="8dp"
+            android:textColor="@color/text_color_primary" />
 
-        <Button
+        <!-- שאלה על EpiPen -->
+        <LinearLayout
+            android:id="@+id/layout_epipen_question"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            android:paddingTop="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Do you have an EpiPen?"
+                android:textSize="16sp"
+                android:textColor="@color/text_color_primary" />
+
+            <Switch
+                android:id="@+id/switch_has_epipen"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginStart="16dp"/>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonSelectEpiPenExpiry"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select EpiPen Expiry Date"
+            android:text="EpiPen Expiry Date"
             android:layout_marginTop="16dp"
-            android:enabled="false" />
+            android:enabled="false"
+            android:visibility="gone"
+            app:cornerRadius="8dp"
+            android:textColor="@color/white"
+            android:backgroundTint="@color/button_color" />
 
         <TextView
             android:id="@+id/textViewEpiPenExpiry"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="8dp"
+            android:textColor="@color/text_color_primary"
+            android:visibility="gone"/>
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonEditProfile"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Edit Profile"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="24dp"
+            app:cornerRadius="8dp"
+            android:textColor="@color/white"
+            android:backgroundTint="@color/accent_color" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonSaveProfile"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Save Profile"
             android:layout_marginTop="16dp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:cornerRadius="8dp"
+            android:textColor="@color/white"
+            android:backgroundTint="@color/accent_color" />
 
     </LinearLayout>
 </ScrollView>

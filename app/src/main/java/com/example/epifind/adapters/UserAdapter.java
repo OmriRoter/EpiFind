@@ -1,4 +1,4 @@
-package com.example.epifind;
+package com.example.epifind.adapters;
 
 import android.view.LayoutInflater;
 import android.view.View;
@@ -7,6 +7,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.example.epifind.R;
+import com.example.epifind.models.UserProfile;
 
 import java.util.List;
 
@@ -29,7 +32,7 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
         UserProfile user = users.get(position);
         holder.nameTextView.setText(user.getName());
-        // TODO: Add more user information as needed
+        holder.statusTextView.setText(getStatusString(user.getResponseStatus()));
     }
 
     @Override
@@ -37,12 +40,26 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder
         return users.size();
     }
 
+    private String getStatusString(UserProfile.ResponseStatus status) {
+        switch (status) {
+            case RESPONDING:
+                return "Coming!";
+            case UNAVAILABLE:
+                return "Unavailable";
+            case AVAILABLE:
+            default:
+                return "Available";
+        }
+    }
+
     static class UserViewHolder extends RecyclerView.ViewHolder {
         TextView nameTextView;
+        TextView statusTextView;
 
         UserViewHolder(@NonNull View itemView) {
             super(itemView);
             nameTextView = itemView.findViewById(R.id.nameTextView);
+            statusTextView = itemView.findViewById(R.id.statusTextView);
         }
     }
 }

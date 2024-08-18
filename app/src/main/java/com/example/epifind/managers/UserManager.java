@@ -1,8 +1,11 @@
-package com.example.epifind;
+package com.example.epifind.managers;
 
 import android.text.TextUtils;
 import android.util.Log;
+
 import androidx.annotation.NonNull;
+
+import com.example.epifind.models.UserProfile;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
@@ -29,10 +32,6 @@ public class UserManager {
         return instance;
     }
 
-    public FirebaseUser getCurrentUser() {
-        return mAuth.getCurrentUser();
-    }
-
     public void createOrUpdateUser(UserProfile userProfile, final OnUserProfileUpdateListener listener) {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser == null) {
@@ -44,64 +43,17 @@ public class UserManager {
         }
 
         String userId = currentUser.getUid();
+        userProfile.setUserId(userId);
 
-        mDatabase.child("users").child(userId).addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                UserProfile existingProfile = dataSnapshot.getValue(UserProfile.class);
-                if (existingProfile != null) {
-                    // שמירה על ה-FCM token הקיים
-                    userProfile.setFcmToken(existingProfile.getFcmToken());
-                    // שמירה על נתוני מיקום קיימים
-                    userProfile.setLatitude(existingProfile.getLatitude());
-                    userProfile.setLongitude(existingProfile.getLongitude());
-                }
-
-                mDatabase.child("users").child(userId).setValue(userProfile)
-                        .addOnSuccessListener(aVoid -> {
-                            Log.d(TAG, "User profile updated successfully");
-                            if (listener != null) {
-                                listener.onSuccess();
-                            }
-                        })
-                        .addOnFailureListener(e -> {
-                            Log.e(TAG, "Error updating user profile", e);
-                            if (listener != null) {
-                                listener.onFailure(e.getMessage());
-                            }
-                        });
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-                Log.e(TAG, "Error fetching existing user profile", databaseError.toException());
-                if (listener != null) {
-                    listener.onFailure(databaseError.getMessage());
-                }
-            }
-        });
-    }
-
-    public void updateFCMToken(String token, OnUserProfileUpdateListener listener) {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
-            Log.e(TAG, "No user is signed in");
-            if (listener != null) {
-                listener.onFailure("No user is signed in");
-            }
-            return;
-        }
-
-        String userId = currentUser.getUid();
-        mDatabase.child("users").child(userId).child("fcmToken").setValue(token)
+        mDatabase.child("users").child(userId).setValue(userProfile)
                 .addOnSuccessListener(aVoid -> {
-                    Log.d(TAG, "FCM token updated successfully");
+                    Log.d(TAG, "User profile updated successfully");
                     if (listener != null) {
                         listener.onSuccess();
                     }
                 })
                 .addOnFailureListener(e -> {
-                    Log.e(TAG, "Error updating FCM token", e);
+                    Log.e(TAG, "Error updating user profile", e);
                     if (listener != null) {
                         listener.onFailure(e.getMessage());
                     }
@@ -124,6 +76,7 @@ public class UserManager {
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 UserProfile userProfile = dataSnapshot.getValue(UserProfile.class);
                 if (userProfile != null) {
+                    userProfile.setUserId(dataSnapshot.getKey());
                     Log.d(TAG, "User profile fetched successfully");
                     if (listener != null) {
                         listener.onSuccess(userProfile);
@@ -142,6 +95,26 @@ public class UserManager {
                 if (listener != null) {
                     listener.onFailure(databaseError.getMessage());
                 }
+            }
+        });
+    }
+
+    public void getUserProfileById(String userId, final OnUserProfileFetchListener listener) {
+        mDatabase.child("users").child(userId).addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                UserProfile userProfile = dataSnapshot.getValue(UserProfile.class);
+                if (userProfile != null) {
+                    userProfile.setUserId(dataSnapshot.getKey());
+                    listener.onSuccess(userProfile);
+                } else {
+                    listener.onFailure("User profile does not exist");
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+                listener.onFailure(databaseError.getMessage());
             }
         });
     }
@@ -185,13 +158,38 @@ public class UserManager {
         });
     }
 
+    public void updateUserResponseStatus(UserProfile.ResponseStatus status, final OnUserProfileUpdateListener listener) {
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser == null) {
+            if (listener != null) {
+                listener.onFailure("No user is signed in");
+            }
+            return;
+        }
+
+        String userId = currentUser.getUid();
+        mDatabase.child("users").child(userId).child("responseStatus").setValue(status.name())
+                .addOnSuccessListener(aVoid -> {
+                    if (listener != null) {
+                        listener.onSuccess();
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    if (listener != null) {
+                        listener.onFailure(e.getMessage());
+                    }
+                });
+    }
+
     public interface OnUserProfileUpdateListener {
         void onSuccess();
+
         void onFailure(String error);
     }
 
     public interface OnUserProfileFetchListener {
         void onSuccess(UserProfile userProfile);
+
         void onFailure(String error);
     }
 
