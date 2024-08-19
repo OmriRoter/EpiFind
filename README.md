@@ -2,7 +2,7 @@
 
 EpiFind is an Android application designed to help users with severe allergies by providing real-time location tracking and emergency assistance alerts. The app enables users to share their location and receive notifications when nearby individuals may need assistance with an EpiPen. EpiFind integrates Firebase for user management and data storage, and utilizes various Android services to ensure continuous operation in the background.
 
-![EpiFind Logo](path/to/logo.png)
+![EpiFind Logo](app/src/main/res/drawable/epifinlogo.png)
 
 ## Features
 
