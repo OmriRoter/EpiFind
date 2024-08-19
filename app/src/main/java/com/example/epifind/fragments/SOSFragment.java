@@ -1,8 +1,9 @@
-
 package com.example.epifind.fragments;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
@@ -10,6 +11,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -45,12 +47,16 @@ import com.google.firebase.database.ValueEventListener;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
+/**
+ * SOSFragment is responsible for managing and displaying the SOS functionality in the application.
+ * It displays nearby users with EpiPens on a map and handles SOS requests and responses.
+ */
 public class SOSFragment extends Fragment implements OnMapReadyCallback {
 
     private static final String TAG = "SOSFragment";
-    private static final float SEARCH_RADIUS = 2000; // 2 km in meters
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
     private MapView mapView;
@@ -62,7 +68,13 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
     private SOSManager sosManager;
     private TextView usersCountTextView;
     private long sosTimestamp;
+    private SeekBar searchRadiusSeekBar;
+    private TextView searchRadiusTextView;
+    private float searchRadius; // in KM
+    private static final float MIN_SEARCH_RADIUS = 1f; // 1 KM
+    private static final float MAX_SEARCH_RADIUS = 10f; // 10 KM
 
+    @SuppressLint("MissingInflatedId")
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -76,6 +88,11 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         usersRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         userAdapter = new UserAdapter(nearbyUsersWithEpiPen);
         usersRecyclerView.setAdapter(userAdapter);
+
+        searchRadiusSeekBar = view.findViewById(R.id.searchRadiusSeekBar);
+        searchRadiusTextView = view.findViewById(R.id.searchRadiusTextView);
+
+        setupSearchRadiusControl();
 
         usersCountTextView = view.findViewById(R.id.usersCountTextView);
 
@@ -96,6 +113,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         getCurrentLocation();
     }
 
+    /**
+     * Retrieves the current location of the user and finds nearby users with EpiPens.
+     */
     private void getCurrentLocation() {
         if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(requireActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
@@ -114,10 +134,13 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
                 });
     }
 
+    /**
+     * Finds nearby users with EpiPens and updates the UI with their information.
+     */
     public void findNearbyUsersWithEpiPen() {
         if (currentLocation == null) return;
 
-        String currentUserId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        String currentUserId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         DatabaseReference sosRequestRef = FirebaseDatabase.getInstance().getReference("sos_requests").child(currentUserId);
 
         sosRequestRef.addListenerForSingleValueEvent(new ValueEventListener() {
@@ -136,6 +159,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Retrieves the list of users from the database and filters those who have EpiPens and are within the search radius.
+     */
     private void findNearbyUsersFromDatabase() {
         mDatabase.child("users").addValueEventListener(new ValueEventListener() {
             @Override
@@ -148,7 +174,7 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
                         float[] distance = new float[1];
                         Location.distanceBetween(currentLocation.getLatitude(), currentLocation.getLongitude(),
                                 user.getLatitude(), user.getLongitude(), distance);
-                        if (distance[0] <= SEARCH_RADIUS) {
+                        if (distance[0] <= searchRadius * 1000) { // new radius
                             nearbyUsersWithEpiPen.add(user);
                         }
                     }
@@ -166,6 +192,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Updates the UI elements such as the map and the list of nearby users.
+     */
     @SuppressLint({"NotifyDataSetChanged", "SetTextI18n"})
     private void updateUI() {
         userAdapter.notifyDataSetChanged();
@@ -173,6 +202,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         updateMap();
     }
 
+    /**
+     * Updates the map with markers representing the locations of the nearby users with EpiPens.
+     */
     private void updateMap() {
         if (mMap == null) return;
 
@@ -200,17 +232,37 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
 
         if (currentLocation != null) {
             LatLng currentLatLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+            float zoomLevel = calculateZoomLevel(searchRadius);
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, zoomLevel));
+        }
+        if (currentLocation != null) {
+            LatLng currentLatLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
             mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 15f));
             mMap.addMarker(new MarkerOptions()
                     .position(currentLatLng)
                     .title("You")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
         }
+
     }
 
+    /**
+     * Calculates the appropriate zoom level for the map based on the search radius.
+     *
+     * @param radius The search radius in kilometers.
+     * @return The zoom level for the map.
+     */
+    private float calculateZoomLevel(float radius) {
+        return (float) (16 - Math.log(radius) / Math.log(2));
+    }
+
+    /**
+     * Cancels the SOS request and resets the nearby users' statuses.
+     */
     private void cancelSOS() {
-        String currentUserId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        String currentUserId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         DatabaseReference sosRequestsRef = FirebaseDatabase.getInstance().getReference("sos_requests");
+        DatabaseReference latestSosRef = FirebaseDatabase.getInstance().getReference("latest_sos");
 
         sosRequestsRef.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
@@ -219,6 +271,22 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
                     String requester = childSnapshot.child("requester").getValue(String.class);
                     if (requester != null && requester.equals(currentUserId)) {
                         childSnapshot.getRef().removeValue();
+
+                        // Remove the latest_sos entry
+                        latestSosRef.addListenerForSingleValueEvent(new ValueEventListener() {
+                            @Override
+                            public void onDataChange(@NonNull DataSnapshot latestSosSnapshot) {
+                                String latestSosRequester = latestSosSnapshot.child("requester").getValue(String.class);
+                                if (latestSosRequester != null && latestSosRequester.equals(currentUserId)) {
+                                    latestSosRef.removeValue();
+                                }
+                            }
+
+                            @Override
+                            public void onCancelled(@NonNull DatabaseError databaseError) {
+                                Log.e("cancelSOS", "Failed to remove latest_sos: " + databaseError.getMessage());
+                            }
+                        });
                     }
                 }
 
@@ -246,6 +314,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Resets the response status of nearby users to "AVAILABLE".
+     */
     private void resetNearbyUsersStatus() {
         DatabaseReference usersRef = FirebaseDatabase.getInstance().getReference("users");
         usersRef.addListenerForSingleValueEvent(new ValueEventListener() {
@@ -263,6 +334,9 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Sets up a listener for SOS responses from nearby users.
+     */
     private void setupSOSResponseListener() {
         String currentUserId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         DatabaseReference sosResponsesRef = FirebaseDatabase.getInstance().getReference("sos_responses").child(currentUserId);
@@ -299,6 +373,12 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Updates the response status of a nearby user based on their SOS response.
+     *
+     * @param userId  The ID of the user whose status needs to be updated.
+     * @param canHelp Whether the user is able to help.
+     */
     private void updateNearbyUserStatus(String userId, boolean canHelp) {
         for (UserProfile user : nearbyUsersWithEpiPen) {
             if (user.getUserId().equals(userId)) {
@@ -307,6 +387,62 @@ public class SOSFragment extends Fragment implements OnMapReadyCallback {
             }
         }
         updateUI();
+    }
+
+    /**
+     * Sets up the search radius control (SeekBar) for adjusting the radius of the search for nearby users.
+     */
+    private void setupSearchRadiusControl() {
+        searchRadius = loadSearchRadius();
+        int progress = (int) ((searchRadius - MIN_SEARCH_RADIUS) / (MAX_SEARCH_RADIUS - MIN_SEARCH_RADIUS) * 100);
+        searchRadiusSeekBar.setProgress(progress);
+        updateSearchRadiusDisplay();
+
+        searchRadiusSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                searchRadius = MIN_SEARCH_RADIUS + (MAX_SEARCH_RADIUS - MIN_SEARCH_RADIUS) * progress / 100f;
+                updateSearchRadiusDisplay();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                saveSearchRadius(searchRadius);
+                findNearbyUsersWithEpiPen();
+            }
+        });
+    }
+
+    /**
+     * Updates the display of the search radius.
+     */
+    private void updateSearchRadiusDisplay() {
+        searchRadiusTextView.setText(String.format(Locale.getDefault(), "Search Radius: %.1f km", searchRadius));
+    }
+
+    /**
+     * Saves the search radius to SharedPreferences.
+     *
+     * @param radius The search radius to save.
+     */
+    private void saveSearchRadius(float radius) {
+        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putFloat("search_radius", radius);
+        editor.apply();
+    }
+
+    /**
+     * Loads the search radius from SharedPreferences.
+     *
+     * @return The saved search radius, or a default value of 2 km if not found.
+     */
+    private float loadSearchRadius() {
+        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
+        return prefs.getFloat("search_radius", 2f); // 2 km default
     }
 
     // MapView lifecycle methods

@@ -1,7 +1,5 @@
 package com.example.epifind.services;
 
-import static android.content.ContentValues.TAG;
-
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -38,8 +36,13 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+/**
+ * LocationUpdateService is a foreground service that continuously tracks the user's location and updates it in Firebase.
+ * It also listens for SOS alerts from nearby users and notifies the user if someone needs help.
+ */
 public class LocationUpdateService extends Service {
 
+    private static final String TAG = "LocationUpdateService";
     private static final String CHANNEL_ID = "LocationServiceChannel";
     private static final int NOTIFICATION_ID = 12345;
     private static final float MIN_DISTANCE_FOR_UPDATE = 10; // 10 meters
@@ -56,10 +59,27 @@ public class LocationUpdateService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        initializeComponents();
+        setupLocationCallback();
+        setupSosListener();
+    }
+
+    /**
+     * Initializes the components needed for the service, such as location client, Firebase references, and notification manager.
+     */
+    private void initializeComponents() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mDatabase = FirebaseDatabase.getInstance().getReference();
         currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        notificationManager = new LocalNotificationManager(this);
+        latestSosRef = FirebaseDatabase.getInstance().getReference("latest_sos");
+    }
 
+    /**
+     * Sets up the location callback to handle location updates.
+     * The callback checks if the location should be updated in Firebase based on the distance moved.
+     */
+    private void setupLocationCallback() {
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(@NonNull LocationResult locationResult) {
@@ -71,16 +91,19 @@ public class LocationUpdateService extends Service {
                 }
             }
         };
-        notificationManager = new LocalNotificationManager(this);
-        latestSosRef = FirebaseDatabase.getInstance().getReference("latest_sos");
+    }
 
+    /**
+     * Sets up a listener to monitor SOS alerts from other users.
+     * If an SOS alert is detected and the user is not the requester, a notification is shown.
+     */
+    private void setupSosListener() {
         sosListener = new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 if (dataSnapshot.exists()) {
                     String requesterId = dataSnapshot.child("requester").getValue(String.class);
                     if (requesterId != null && !requesterId.equals(currentUser.getUid())) {
-                        // A new SOS has been triggered by someone else
                         notificationManager.showNotification(
                                 "SOS Alert",
                                 "Someone nearby needs help with an EpiPen!"
@@ -96,30 +119,32 @@ public class LocationUpdateService extends Service {
         };
     }
 
-
-
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (checkPermissions()) {
-                createNotificationChannel();
-                startForeground(NOTIFICATION_ID, buildNotification());
-                requestLocationUpdates();
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && checkPermissions()) {
+            createNotificationChannel();
+            startForeground(NOTIFICATION_ID, buildNotification());
+            requestLocationUpdates();
         }
-        // Start listening for SOS updates
         latestSosRef.addValueEventListener(sosListener);
-
         return START_STICKY;
     }
 
+    /**
+     * Checks whether the necessary permissions have been granted.
+     *
+     * @return True if all required permissions are granted, false otherwise.
+     */
     @RequiresApi(api = Build.VERSION_CODES.P)
     private boolean checkPermissions() {
-        return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.FOREGROUND_SERVICE) == PackageManager.PERMISSION_GRANTED;
+        return ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE) == PackageManager.PERMISSION_GRANTED;
     }
 
+    /**
+     * Creates a notification channel for the service, required for Android O and above.
+     */
     private void createNotificationChannel() {
         NotificationChannel serviceChannel = new NotificationChannel(
                 CHANNEL_ID,
@@ -130,6 +155,11 @@ public class LocationUpdateService extends Service {
         manager.createNotificationChannel(serviceChannel);
     }
 
+    /**
+     * Builds the notification that will be shown when the service is running in the foreground.
+     *
+     * @return The notification to be displayed.
+     */
     private Notification buildNotification() {
         Intent notificationIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
@@ -142,39 +172,44 @@ public class LocationUpdateService extends Service {
                 .build();
     }
 
+    /**
+     * Requests location updates from the FusedLocationProviderClient.
+     * Updates are requested at a high accuracy and frequent interval.
+     */
     private void requestLocationUpdates() {
-        LocationRequest locationRequest = LocationRequest.create();
-        locationRequest.setInterval(10000); // 10 seconds
-        locationRequest.setFastestInterval(5000); // 5 seconds
-        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        LocationRequest locationRequest = LocationRequest.create()
+                .setInterval(10000)
+                .setFastestInterval(5000)
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             if (checkPermissions()) {
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    // here to request the missing permissions, and then overriding
-                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                    //                                          int[] grantResults)
-                    // to handle the case where the user grants the permission. See the documentation
-                    // for ActivityCompat#requestPermissions for more details.
-                    return;
+                try {
+                    fusedLocationClient.requestLocationUpdates(locationRequest,
+                            locationCallback,
+                            Looper.getMainLooper());
+                } catch (SecurityException e) {
+                    Log.e(TAG, "Error requesting location updates", e);
                 }
-                fusedLocationClient.requestLocationUpdates(locationRequest,
-                        locationCallback,
-                        Looper.getMainLooper());
             }
         }
     }
 
+    /**
+     * Determines whether the new location should be updated in Firebase based on the distance moved.
+     *
+     * @param newLocation The new location to evaluate.
+     * @return True if the location should be updated, false otherwise.
+     */
     private boolean shouldUpdateLocation(Location newLocation) {
-        if (lastLocation == null) {
-            return true;
-        }
-        float distance = newLocation.distanceTo(lastLocation);
-        return distance >= MIN_DISTANCE_FOR_UPDATE;
+        return lastLocation == null || newLocation.distanceTo(lastLocation) >= MIN_DISTANCE_FOR_UPDATE;
     }
 
+    /**
+     * Updates the user's location in Firebase Realtime Database.
+     *
+     * @param location The location to update.
+     */
     private void updateLocationInFirebase(Location location) {
         if (currentUser != null) {
             mDatabase.child("users").child(currentUser.getUid()).child("latitude").setValue(location.getLatitude());
@@ -186,7 +221,6 @@ public class LocationUpdateService extends Service {
     public void onDestroy() {
         super.onDestroy();
         fusedLocationClient.removeLocationUpdates(locationCallback);
-        // Remove the SOS listener
         if (sosListener != null) {
             latestSosRef.removeEventListener(sosListener);
         }

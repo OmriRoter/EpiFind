@@ -30,25 +30,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * SOSManager handles the SOS functionality within the EpiFind app.
+ * It manages the activation of SOS requests, notifying nearby users,
+ * and managing the user's SOS state.
+ */
 public class SOSManager {
-    private static final String TAG = "SOSManager";
+    private static final long VIBRATION_DURATION = 3000; // 3 seconds
+    private static final long VIBRATION_INTERVAL = 500; // 0.5 seconds
+
     private final Context context;
     private final Vibrator vibrator;
     private final Handler handler;
-    private static final long VIBRATION_DURATION = 3000; // 3 seconds
-    private static final long VIBRATION_INTERVAL = 500; // 0.5 seconds
-    private boolean isActivating = false;
     private final UserManager userManager;
     private final DatabaseReference mDatabase;
-    private SOSFragment sosFragment;
     private final LocalNotificationManager notificationManager;
+    private SOSFragment sosFragment;
+    private boolean isActivating = false;
 
+    /**
+     * Interface to handle SOS activation events.
+     */
     public interface SOSActivationListener {
         void onSOSActivationStarted();
         void onSOSActivationCancelled();
         void onSOSActivated();
     }
 
+    /**
+     * Constructor for SOSManager.
+     *
+     * @param context The context used to access system services and resources.
+     */
     public SOSManager(Context context) {
         this.context = context;
         this.vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
@@ -59,10 +72,20 @@ public class SOSManager {
         this.notificationManager = new LocalNotificationManager(context);
     }
 
+    /**
+     * Sets the associated SOSFragment, allowing interaction with the fragment's UI.
+     *
+     * @param fragment The SOSFragment to associate with this manager.
+     */
     public void setSosFragment(SOSFragment fragment) {
         this.sosFragment = fragment;
     }
 
+    /**
+     * Starts the SOS activation process, including vibration and a delay for final activation.
+     *
+     * @param listener The listener to handle SOS activation events.
+     */
     public void startSOSActivation(SOSActivationListener listener) {
         isActivating = true;
         listener.onSOSActivationStarted();
@@ -83,6 +106,11 @@ public class SOSManager {
         }, VIBRATION_DURATION);
     }
 
+    /**
+     * Cancels the SOS activation process if it is still ongoing.
+     *
+     * @param listener The listener to handle SOS cancellation events.
+     */
     public void cancelSOSActivation(SOSActivationListener listener) {
         if (isActivating) {
             handler.removeCallbacksAndMessages(null);
@@ -94,6 +122,11 @@ public class SOSManager {
         }
     }
 
+    /**
+     * Activates the SOS request by obtaining the user's location and notifying nearby users.
+     *
+     * @param listener The listener to handle SOS activation events.
+     */
     public void activateSOS(SOSActivationListener listener) {
         String userId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
 
@@ -136,6 +169,11 @@ public class SOSManager {
         }
     }
 
+    /**
+     * Notifies nearby users with EpiPens about the active SOS request.
+     *
+     * @param nearbyUsers The list of nearby users to notify.
+     */
     public void notifyNearbyUsers(List<UserProfile> nearbyUsers) {
         String currentUserId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         DatabaseReference sosRequestRef = mDatabase.child("sos_requests").child(currentUserId);
@@ -144,24 +182,37 @@ public class SOSManager {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 if (dataSnapshot.exists()) {
+                    Double requestLat = dataSnapshot.child("latitude").getValue(Double.class);
+                    Double requestLon = dataSnapshot.child("longitude").getValue(Double.class);
+
                     for (UserProfile user : nearbyUsers) {
                         String userId = user.getUserId();
                         if (userId != null && !userId.equals(currentUserId)) {
+                            float[] distance = new float[1];
+                            Location.distanceBetween(requestLat, requestLon, user.getLatitude(), user.getLongitude(), distance);
+
+                            Log.d("SOSManager", "Notifying user: " + userId + " at distance: " + distance[0] + " meters");
+
                             mDatabase.child("sos_notifications").child(userId).setValue(dataSnapshot.getValue());
                         }
                     }
-                    // Update a general SOS node to trigger notifications
                     mDatabase.child("latest_sos").setValue(dataSnapshot.getValue());
                 }
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError databaseError) {
-                Log.e(TAG, "Failed to read SOS request data", databaseError.toException());
+                Log.e("SOSManager", "Failed to read SOS request data", databaseError.toException());
             }
         });
     }
 
+    /**
+     * Updates the user's SOS state in their profile.
+     *
+     * @param needsHelp Indicates whether the user is in need of help.
+     * @param listener  The listener to handle the result of the update.
+     */
     public void updateSOSState(boolean needsHelp, final UserManager.OnUserProfileUpdateListener listener) {
         userManager.getUserProfile(new UserManager.OnUserProfileFetchListener() {
             @Override
@@ -191,6 +242,11 @@ public class SOSManager {
         });
     }
 
+    /**
+     * Cancels the active SOS request and clears related notifications.
+     *
+     * @param listener The listener to handle the result of the cancellation.
+     */
     private void cancelSOS(UserManager.OnUserProfileUpdateListener listener) {
         String userId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         mDatabase.child("sos_requests").child(userId).removeValue()
@@ -199,51 +255,5 @@ public class SOSManager {
                     notificationManager.cancelAllNotifications();
                 })
                 .addOnFailureListener(e -> listener.onFailure(e.getMessage()));
-    }
-
-    public void deleteSosRequest(String requesterId, OnSosRequestDeleteListener listener) {
-        DatabaseReference sosRequestsRef = FirebaseDatabase.getInstance().getReference("sos_requests");
-        sosRequestsRef.addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                boolean requestFound = false;
-                for (DataSnapshot childSnapshot : dataSnapshot.getChildren()) {
-                    String requester = childSnapshot.child("requester").getValue(String.class);
-                    if (requester != null && requester.equals(requesterId)) {
-                        childSnapshot.getRef().removeValue()
-                                .addOnSuccessListener(aVoid -> {
-                                    Log.d(TAG, "SOS request deleted successfully");
-                                    if (listener != null) {
-                                        listener.onSuccess();
-                                    }
-                                })
-                                .addOnFailureListener(e -> {
-                                    Log.e(TAG, "Error deleting SOS request", e);
-                                    if (listener != null) {
-                                        listener.onFailure(e.getMessage());
-                                    }
-                                });
-                        requestFound = true;
-                        break;
-                    }
-                }
-                if (!requestFound && listener != null) {
-                    listener.onFailure("SOS request not found");
-                }
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-                Log.e(TAG, "Error searching for SOS request", databaseError.toException());
-                if (listener != null) {
-                    listener.onFailure(databaseError.getMessage());
-                }
-            }
-        });
-    }
-
-    public interface OnSosRequestDeleteListener {
-        void onSuccess();
-        void onFailure(String error);
     }
 }

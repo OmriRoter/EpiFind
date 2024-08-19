@@ -151,5 +151,16 @@
             android:textColor="@color/white"
             android:backgroundTint="@color/accent_color" />
 
+        <!-- New Logout Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonLogout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Logout"
+            android:layout_marginTop="24dp"
+            app:cornerRadius="8dp"
+            android:textColor="@color/white"
+            android:backgroundTint="@color/button_color" />
+
     </LinearLayout>
 </ScrollView>

@@ -9,9 +9,6 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.FrameLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -32,51 +29,63 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.example.epifind.databinding.FragmentHomeBinding;
 
+/**
+ * HomeFragment is the main screen of the app that shows a map and handles SOS activation.
+ * It also checks for EpiPen expiration and alerts the user when necessary.
+ */
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
+
     private FragmentHomeBinding binding;
     private GoogleMap mMap;
     private SOSManager sosManager;
     private UserManager userManager;
-    private FrameLayout alertContainer;
-    private TextView alertMessage;
-    private Button dismissButton;
-
-    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
     private FusedLocationProviderClient fusedLocationClient;
 
-    @SuppressLint("ClickableViewAccessibility")
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         binding = FragmentHomeBinding.inflate(inflater, container, false);
-        View view = binding.getRoot();
+        initializeComponents();
+        setupViews();
+        return binding.getRoot();
+    }
 
+    /**
+     * Initializes the necessary components such as managers and location services.
+     */
+    private void initializeComponents() {
         userManager = UserManager.getInstance();
         sosManager = new SOSManager(requireContext());
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
+    }
 
-        // Initialize map
+    /**
+     * Sets up the views, including the map, SOS button, and EpiPen expiry checks.
+     */
+    private void setupViews() {
+        initializeMap();
+        setupSosButton();
+        setupDismissButton();
+        checkEpiPenExpiry();
+    }
+
+    /**
+     * Initializes the map fragment and sets up the callback for when the map is ready.
+     */
+    private void initializeMap() {
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
+    }
 
-        // Initialize alert views
-        alertContainer = view.findViewById(R.id.alertContainer);
-        alertMessage = view.findViewById(R.id.alertMessage);
-        dismissButton = view.findViewById(R.id.dismissButton);
-
-        // Set up SOS button
-        setupSosButton();
-
-        // Set up dismiss button for alert
-        dismissButton.setOnClickListener(v -> alertContainer.setVisibility(View.GONE));
-
-        // Check EpiPen expiry
-        checkEpiPenExpiry();
-
-        return view;
+    /**
+     * Sets up the dismiss button to hide the alert container when clicked.
+     */
+    private void setupDismissButton() {
+        binding.dismissButton.setOnClickListener(v -> binding.alertContainer.setVisibility(View.GONE));
     }
 
     @Override
@@ -85,33 +94,46 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         checkEpiPenExpiry();
     }
 
+    /**
+     * Checks if the user's EpiPen is close to expiration and shows an alert if necessary.
+     */
     private void checkEpiPenExpiry() {
-        EpiPenExpiryChecker.checkEpiPenExpiry(userManager, daysUntilExpiry -> {
+        EpiPenExpiryChecker.checkEpiPenExpiry(userManager, this::handleEpiPenExpiry);
+    }
+
+    /**
+     * Handles the EpiPen expiry alert logic based on the number of days until expiry.
+     *
+     * @param daysUntilExpiry Number of days until the EpiPen expires.
+     */
+    private void handleEpiPenExpiry(int daysUntilExpiry) {
+        Context context = getContext();
+        if (context != null) {
             if (daysUntilExpiry <= 7 && daysUntilExpiry > 0) {
-                Context context = getContext();
-                if (context != null) {
-                    showExpiryAlert(daysUntilExpiry);
-                }
+                showExpiryAlert(daysUntilExpiry);
             } else if (daysUntilExpiry == 0) {
-                Context context = getContext();
-                if (context != null) {
-                    showExpiryAlert(daysUntilExpiry);
-                    Toast.makeText(context, "Your EpiPen expires today! Please replace it.", Toast.LENGTH_LONG).show();
-                }
+                showExpiryAlert(daysUntilExpiry);
+                Toast.makeText(context, "Your EpiPen expires today! Please replace it.", Toast.LENGTH_LONG).show();
             }
-        });
-    }
-
-
-    private void showExpiryAlert(int days) {
-        if (days == 0) {
-            alertMessage.setText("Your EpiPen has expired! Please replace it immediately.");
-        } else {
-            alertMessage.setText("Your EpiPen will expire in " + days + " days!");
         }
-        alertContainer.setVisibility(View.VISIBLE);
     }
 
+    /**
+     * Shows an alert to the user regarding the EpiPen expiry status.
+     *
+     * @param days Number of days until the EpiPen expires.
+     */
+    @SuppressLint("SetTextI18n")
+    private void showExpiryAlert(int days) {
+        binding.alertMessage.setText(days == 0
+                ? "Your EpiPen has expired! Please replace it immediately."
+                : "Your EpiPen will expire in " + days + " days!");
+        binding.alertContainer.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * Sets up the SOS button with touch listeners to handle SOS activation and cancellation.
+     */
     @SuppressLint("ClickableViewAccessibility")
     private void setupSosButton() {
         binding.sosButton.setOnTouchListener((v, event) -> {
@@ -125,28 +147,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
                         @Override
                         public void onSOSActivationCancelled() {
-                            // Reset any UI changes made during activation
                             Toast.makeText(requireContext(), "SOS Cancelled", Toast.LENGTH_SHORT).show();
                         }
 
                         @Override
                         public void onSOSActivated() {
-                            // Update SOS state in UserProfile and Firebase
-                            sosManager.updateSOSState(true, new UserManager.OnUserProfileUpdateListener() {
-                                @Override
-                                public void onSuccess() {
-                                    Toast.makeText(requireContext(), "SOS Activated", Toast.LENGTH_SHORT).show();
-                                    // Navigate to SOS screen
-                                    if (getActivity() instanceof MainActivity) {
-                                        ((MainActivity) getActivity()).navigateToSOSFragment();
-                                    }
-                                }
-
-                                @Override
-                                public void onFailure(String error) {
-                                    Toast.makeText(requireContext(), "Failed to activate SOS: " + error, Toast.LENGTH_SHORT).show();
-                                }
-                            });
+                            activateSOS();
                         }
                     });
                     return true;
@@ -154,16 +160,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 case MotionEvent.ACTION_CANCEL:
                     sosManager.cancelSOSActivation(new SOSManager.SOSActivationListener() {
                         @Override
-                        public void onSOSActivationStarted() {
-                        }
-
+                        public void onSOSActivationStarted() {}
                         @Override
-                        public void onSOSActivationCancelled() {
-                        }
-
+                        public void onSOSActivationCancelled() {}
                         @Override
-                        public void onSOSActivated() {
-                        }
+                        public void onSOSActivated() {}
                     });
                     return true;
             }
@@ -171,6 +172,29 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    /**
+     * Activates the SOS mode and updates the user's profile with the SOS status.
+     */
+    private void activateSOS() {
+        sosManager.updateSOSState(true, new UserManager.OnUserProfileUpdateListener() {
+            @Override
+            public void onSuccess() {
+                Toast.makeText(requireContext(), "SOS Activated", Toast.LENGTH_SHORT).show();
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).navigateToSOSFragment();
+                }
+            }
+
+            @Override
+            public void onFailure(String error) {
+                Toast.makeText(requireContext(), "Failed to activate SOS: " + error, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * Enables the My Location layer on the map, allowing the app to display the user's current location.
+     */
     private void enableMyLocation() {
         if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -183,6 +207,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
+    /**
+     * Zooms the map to the user's current location if location permissions are granted.
+     */
     private void zoomToCurrentLocation() {
         if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {

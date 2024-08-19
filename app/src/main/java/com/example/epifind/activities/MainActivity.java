@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -46,6 +47,10 @@ import com.google.firebase.database.ValueEventListener;
 
 import java.util.Objects;
 
+/**
+ * MainActivity handles the main flow of the application.
+ * It manages the bottom navigation, handles permissions, and monitors SOS requests.
+ */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -56,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private ValueEventListener sosRequestListener;
     private DatabaseReference sosRequestRef;
 
+    // Launcher for handling notification permission request
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
@@ -78,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
         askNotificationPermission();
         setupSOSRequestListener();
 
+        // Load the HomeFragment by default if no saved instance state exists
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.fragment_container, new HomeFragment())
@@ -99,6 +106,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Sets up the bottom navigation with fragments for Home, Profile, and Settings.
+     */
     private void setupBottomNavigation() {
         BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
         bottomNav.setOnItemSelectedListener(item -> {
@@ -123,6 +133,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Checks if the user profile is complete.
+     * If not, navigates to the profile fragment in edit mode.
+     */
     private void checkUserProfileComplete() {
         userManager.isProfileComplete(isComplete -> {
             if (!isComplete) {
@@ -137,6 +151,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Asks the user for notification permission if running on Android TIRAMISU or higher.
+     * Also triggers the request for other required permissions.
+     */
     private void askNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -152,10 +170,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Requests all required permissions starting with the location permission.
+     */
     private void requestRequiredPermissions() {
         requestPermission(Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
+    /**
+     * Requests a specific permission.
+     * If permission is granted, handles the permission granted case based on Android version.
+     *
+     * @param permission The permission to request.
+     */
     private void requestPermission(String permission) {
         if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
             Log.d(TAG, "Requesting permission: " + permission);
@@ -167,6 +194,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Handles the case where a specific permission has been granted.
+     * Requests the next required permission or starts the location service.
+     *
+     * @param permission The permission that was granted.
+     */
     @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private void onPermissionGranted(String permission) {
         switch (permission) {
@@ -186,6 +219,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Updates the map to the current location if location permissions are granted.
+     * If location is not available, requests a high-accuracy location update.
+     */
     private void updateMapToCurrentLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -208,11 +245,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Starts the location update service to monitor the user's location in the background.
+     */
     private void startLocationService() {
         Intent serviceIntent = new Intent(this, LocationUpdateService.class);
         startService(serviceIntent);
     }
 
+    /**
+     * Checks if Google Play Services are available and shows an error dialog if not.
+     */
     private void checkGooglePlayServices() {
         GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
         int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
@@ -226,6 +269,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Navigates to the HomeFragment and resets the SOS response status.
+     */
     public void navigateToHome() {
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.fragment_container, new HomeFragment())
@@ -236,6 +282,9 @@ public class MainActivity extends AppCompatActivity {
         isSOSResponseShowing = false;
     }
 
+    /**
+     * Navigates to the SOSFragment and adds it to the back stack.
+     */
     public void navigateToSOSFragment() {
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.fragment_container, new SOSFragment())
@@ -243,6 +292,10 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
+    /**
+     * Sets up a listener for SOS requests from the Firebase Realtime Database.
+     * If an active SOS request is received, it triggers the appropriate actions.
+     */
     private void setupSOSRequestListener() {
         String userId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         sosRequestRef = FirebaseDatabase.getInstance().getReference("sos_notifications").child(userId);
@@ -256,9 +309,27 @@ public class MainActivity extends AppCompatActivity {
                     Boolean active = dataSnapshot.child("active").getValue(Boolean.class);
 
                     if (requesterId != null && !requesterId.equals(userId) && latitude != null && longitude != null && active != null && active) {
-                        showSOSNotification();
-                        showSOSResponseFragment(requesterId, latitude, longitude);
-                        isSOSResponseShowing = true;
+                        // Get current user's location
+                        if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                            FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(MainActivity.this);
+                            fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                                if (location != null) {
+                                    float[] distance = new float[1];
+                                    Location.distanceBetween(latitude, longitude,
+                                            location.getLatitude(), location.getLongitude(), distance);
+
+                                    Log.d("MainActivity", "Received SOS notification. Distance: " + distance[0] + " meters");
+
+                                    showSOSNotification();
+                                    showSOSResponseFragment(requesterId, latitude, longitude);
+                                    isSOSResponseShowing = true;
+                                } else {
+                                    Log.e("MainActivity", "Unable to get current location");
+                                }
+                            });
+                        } else {
+                            Log.e("MainActivity", "Location permission not granted");
+                        }
                     } else {
                         Log.e(TAG, "Incomplete or inactive SOS data received");
                     }
@@ -276,14 +347,23 @@ public class MainActivity extends AppCompatActivity {
         sosRequestRef.addValueEventListener(sosRequestListener);
     }
 
+    /**
+     * Resets the user's status to AVAILABLE in the Firebase Realtime Database.
+     */
     private void resetUserStatus() {
-        String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        String userId = Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getUid();
         DatabaseReference userRef = FirebaseDatabase.getInstance().getReference("users").child(userId);
         userRef.child("responseStatus").setValue(UserProfile.ResponseStatus.AVAILABLE.name())
                 .addOnFailureListener(e -> Log.e(TAG, "Failed to reset user status", e));
     }
 
-
+    /**
+     * Displays the SOS response fragment to the user.
+     *
+     * @param requesterId The ID of the user who sent the SOS request.
+     * @param latitude    The latitude of the SOS location.
+     * @param longitude   The longitude of the SOS location.
+     */
     private void showSOSResponseFragment(String requesterId, double latitude, double longitude) {
         SOSResponseFragment fragment = new SOSResponseFragment();
         Bundle args = new Bundle();
@@ -298,7 +378,10 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
-    private void showSOSNotification() {
+    /**
+     * Displays a notification to the user about an SOS request.
+     */
+    public void showSOSNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "SOS_CHANNEL")
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("SOS Request")
@@ -310,13 +393,8 @@ public class MainActivity extends AppCompatActivity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
         PendingIntent pendingIntent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            pendingIntent = PendingIntent.getActivity(this, 0, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        } else {
-            pendingIntent = PendingIntent.getActivity(this, 0, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT);
-        }
+        pendingIntent = PendingIntent.getActivity(this, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         builder.setContentIntent(pendingIntent);
 

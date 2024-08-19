@@ -1,15 +1,11 @@
 package com.example.epifind.fragments;
 
-import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.Switch;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -17,62 +13,112 @@ import androidx.fragment.app.Fragment;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import com.example.epifind.R;
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.example.epifind.databinding.FragmentSettingsBinding;
 
+/**
+ * SettingsFragment allows users to adjust app settings such as SOS notifications,
+ * location sharing, dark mode, and more. It also provides access to the privacy policy.
+ */
 public class SettingsFragment extends Fragment {
+
+    private FragmentSettingsBinding binding;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_settings, container, false);
+        binding = FragmentSettingsBinding.inflate(inflater, container, false);
+        setupListeners();
+        return binding.getRoot();
+    }
 
-        // Initialize views
-        SwitchMaterial switchSosNotifications = view.findViewById(R.id.switchSosNotifications);
-        SwitchMaterial switchLocationSharing = view.findViewById(R.id.switchLocationSharing);
-        SwitchMaterial switchDarkMode = view.findViewById(R.id.switchDarkMode);
-        MaterialButton buttonChangePassword = view.findViewById(R.id.buttonChangePassword);
-        MaterialButton buttonSetEpiPenReminder = view.findViewById(R.id.buttonSetEpiPenReminder);
-        View textViewPrivacyPolicy = view.findViewById(R.id.textViewPrivacyPolicy);
+    /**
+     * Sets up the event listeners for the settings options.
+     */
+    private void setupListeners() {
+        binding.switchSosNotifications.setOnCheckedChangeListener((buttonView, isChecked) ->
+                handleSosNotificationsToggle(isChecked));
 
+        binding.switchLocationSharing.setOnCheckedChangeListener((buttonView, isChecked) ->
+                handleLocationSharingToggle(isChecked));
 
-        // Set up listeners
-        switchSosNotifications.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // TODO: Implement SOS notifications toggle logic
-            Toast.makeText(getContext(), "SOS Notifications " + (isChecked ? "enabled" : "disabled"), Toast.LENGTH_SHORT).show();
-        });
+        binding.switchDarkMode.setOnCheckedChangeListener((buttonView, isChecked) ->
+                handleDarkModeToggle(isChecked));
 
-        switchLocationSharing.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // TODO: Implement location sharing toggle logic
-            Toast.makeText(getContext(), "Location sharing " + (isChecked ? "enabled" : "disabled"), Toast.LENGTH_SHORT).show();
-        });
+        binding.buttonChangePassword.setOnClickListener(v -> handleChangePassword());
 
-        switchDarkMode.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (isChecked) {
-                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-            } else {
-                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-            }
-        });
+        binding.buttonSetEpiPenReminder.setOnClickListener(v -> handleSetEpiPenReminder());
 
-        buttonChangePassword.setOnClickListener(v -> {
-            // TODO: Implement change password logic
-            Toast.makeText(getContext(), "Change password functionality coming soon", Toast.LENGTH_SHORT).show();
-        });
+        binding.textViewPrivacyPolicy.setOnClickListener(v -> openPrivacyPolicy());
+    }
 
-        buttonSetEpiPenReminder.setOnClickListener(v -> {
-            // TODO: Implement EpiPen reminder logic
-            Toast.makeText(getContext(), "EpiPen reminder functionality coming soon", Toast.LENGTH_SHORT).show();
-        });
+    /**
+     * Handles the toggle for SOS notifications.
+     *
+     * @param isChecked Whether SOS notifications are enabled or disabled.
+     */
+    private void handleSosNotificationsToggle(boolean isChecked) {
+        // TODO: Implement SOS notifications toggle logic
+        showToast("SOS Notifications " + (isChecked ? "enabled" : "disabled"));
+    }
 
-        textViewPrivacyPolicy.setOnClickListener(v -> {
-            // TODO: Replace with actual privacy policy URL
-            String url = "https://www.example.com/privacy-policy";
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse(url));
-            startActivity(intent);
-        });
+    /**
+     * Handles the toggle for location sharing.
+     *
+     * @param isChecked Whether location sharing is enabled or disabled.
+     */
+    private void handleLocationSharingToggle(boolean isChecked) {
+        // TODO: Implement location sharing toggle logic
+        showToast("Location sharing " + (isChecked ? "enabled" : "disabled"));
+    }
 
-        return view;
+    /**
+     * Handles the toggle for dark mode.
+     *
+     * @param isChecked Whether dark mode is enabled or disabled.
+     */
+    private void handleDarkModeToggle(boolean isChecked) {
+        AppCompatDelegate.setDefaultNightMode(isChecked ?
+                AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO);
+    }
+
+    /**
+     * Handles the event when the user clicks the "Change Password" button.
+     */
+    private void handleChangePassword() {
+        // TODO: Implement change password logic
+        showToast("Change password functionality coming soon");
+    }
+
+    /**
+     * Handles the event when the user clicks the "Set EpiPen Reminder" button.
+     */
+    private void handleSetEpiPenReminder() {
+        // TODO: Implement EpiPen reminder logic
+        showToast("EpiPen reminder functionality coming soon");
+    }
+
+    /**
+     * Opens the privacy policy in a web browser.
+     */
+    private void openPrivacyPolicy() {
+        // TODO: Replace with actual privacy policy URL
+        String url = "https://www.example.com/privacy-policy";
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        startActivity(intent);
+    }
+
+    /**
+     * Displays a toast message with the provided text.
+     *
+     * @param message The message to display in the toast.
+     */
+    private void showToast(String message) {
+        Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        binding = null;
     }
 }
